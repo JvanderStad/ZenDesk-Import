@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Linq;
 using System.Xml;
 using CommandLine;
 using NLog;
@@ -27,18 +29,49 @@ namespace ZenDesk_import
 			}
 
 
-			LoadXml(options.XmlFile);
+			if ( !LoadXml( options.XmlFile ) )
+			{
+				Logger.Error("Parsing failed");
+				return;
+			}
 
 	
 			Console.ReadLine();
 		}
 
-		private static void LoadXml( string xmlFile )
+		private static bool LoadXml( string xmlFile )
 		{
 			Logger.Info( "Loading Xml" );
 
 			var xml = new XmlDocument();
-			xml.Load( xmlFile );
+			try
+			{
+				xml.Load( xmlFile );
+			}
+			catch ( Exception exception )
+			{
+				Logger.Error( exception, "Error loading XML: {0}", exception );
+				return false;
+			}
+			Logger.Info("Loading Xml");
+
+
+			ParseXml(xml);
+
+			return false;
+		}
+
+		private static void ParseXml( XmlDocument xml )
+		{
+			var tickets = xml.SelectNodes( "/" );
+			if ( tickets == null )
+				return;
+
+			Logger.Info( "{0} tickets found", tickets.Count );
+			foreach ( var ticket in tickets.Cast<XmlElement>() )
+			{
+				
+			}
 		}
 	}
 }
