@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Xml;
 using CommandLine;
+using Newtonsoft.Json;
 using NLog;
 
 namespace ZenDesk_import
@@ -10,6 +12,7 @@ namespace ZenDesk_import
 	static class Program
 	{
 		private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+		private static List<Ticket> _result;
 
 		static void Main(string[] args)
 		{
@@ -43,6 +46,7 @@ namespace ZenDesk_import
 		{
 			Logger.Info( "Loading Xml" );
 
+			_result = new List<Ticket>();
 			var xml = new XmlDocument();
 			try
 			{
@@ -58,7 +62,17 @@ namespace ZenDesk_import
 
 			ParseXml(xml);
 
+			CreateJson();
+
 			return false;
+		}
+
+		private static void CreateJson()
+		{
+			Logger.Info( "Creating JSON" );
+			var result = JsonConvert.SerializeObject( _result );
+
+			Logger.Info( result );
 		}
 
 		private static void ParseXml( XmlDocument xml )
@@ -68,9 +82,12 @@ namespace ZenDesk_import
 				return;
 
 			Logger.Info( "{0} tickets found", tickets.Count );
-			foreach ( var ticket in tickets.Cast<XmlElement>() )
+		
+
+			foreach ( var xmlTicket in tickets.Cast<XmlElement>() )
 			{
-				
+				var ticket = new Ticket();
+				_result.Add( ticket );
 			}
 		}
 	}
