@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml;
 using CommandLine;
 using Newtonsoft.Json;
 using NLog;
-using System.Net;
-using System.IO;
-using System.Text;
-using System.Security.Cryptography;
 
 namespace ZenDesk_import
 {
@@ -86,7 +85,7 @@ namespace ZenDesk_import
             return;
 
          Logger.Info("{0} tickets found", tickets.Count);
-         LoginResult loginResult = CreateLoginRequest(options);
+         var loginResult = CreateLoginRequest(options);
 
 
          foreach (var xmlTicket in tickets.Cast<XmlElement>())
@@ -97,7 +96,7 @@ namespace ZenDesk_import
             ticket.createdByUserId = GetUserId(loginResult, xmlTicket["requester-id"].InnerText, options); // map to the user id
 
             // Category
-            XmlNodeList ticketFields = xmlTicket.SelectNodes("ticket-field-entries/ticket-field-entry");
+            var ticketFields = xmlTicket.SelectNodes("ticket-field-entries/ticket-field-entry");
             var category = ticketFields.Cast<XmlElement>().FirstOrDefault();
             ticket.categoryId = category != null ? category["value"].InnerText : "";
 
@@ -118,7 +117,7 @@ namespace ZenDesk_import
       {
          var content = JsonConvert.SerializeObject(new Login(options));
 
-         WebRequest request = CreateRequest("login", "POST", options, null);
+         var request = CreateRequest("login", "POST", options, null);
          var dataArray = Encoding.UTF8.GetBytes(content.ToString());
          request.ContentLength = dataArray.Length;
 
@@ -131,39 +130,49 @@ namespace ZenDesk_import
 
       private static string GetOrganizationId(LoginResult login, string oldId, CommandlineOptions options)
       {
-         WebRequest request = CreateRequest(String.Format("organizations?code={0}", oldId), "GET", options, login);
+         var request = CreateRequest(String.Format("organizations?code={0}", oldId), "GET", options, login);
 
-         Organization organization = GetObject<Organization>(request);
+         var organization = GetObject<Organization>(request);
 
-         return organization.id.ToString();
+         return organization.id;
       }
 
       private static string GetUserId(LoginResult login, string oldId, CommandlineOptions options)
       {
-         WebRequest request = CreateRequest(String.Format("user?code={0}", oldId), "GET", options, login);
+         var request = CreateRequest(String.Format("user?code={0}", oldId), "GET", options, login);
 
-         User user = GetObject<User>(request);
+         var user = GetObject<User>(request);
 
          return user.id.ToString();
       }
 
+
+	  public static long GetEpochTime(DateTime dt)
+	  {
+		  return
+			  Convert.ToInt64(
+									 (dt.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+										 .TotalMilliseconds);
+	  }
+
       private static WebRequest CreateRequest(string endpoint, string method, CommandlineOptions options, LoginResult login)
       {
-         WebRequest request = WebRequest.Create(options.DefactoUrl + options.ApiRoot + endpoint);
+         var request = WebRequest.Create(options.DefactoUrl + options.ApiRoot + endpoint);
          request.Method = method;
 
          if (login != null)
          {
-            int timestamp = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-            string concatenatedString = String.Format("{0}{1}{2}{3}{4}", login.applicationId, method.ToLower(), options.ApiRoot, endpoint, timestamp);
-            var encoding = new System.Text.ASCIIEncoding();
-            byte[] keyByte = encoding.GetBytes(login.secret);
-            byte[] messageBytes = encoding.GetBytes(concatenatedString);
+			 var timestamp = GetEpochTime(DateTime.Now);
+
+            var concatenatedString = String.Format("{0}{1}{2}{3}{4}", login.applicationId, method.ToLower(), options.ApiRoot, endpoint, timestamp);
+            var encoding = new ASCIIEncoding();
+            var keyByte = encoding.GetBytes(login.secret);
+            var messageBytes = encoding.GetBytes(concatenatedString);
             using (var hmacsha256 = new HMACSHA256(keyByte))
             {
-               byte[] hashmessage = hmacsha256.ComputeHash(messageBytes);
+               var hashmessage = hmacsha256.ComputeHash(messageBytes);
 
-               string authHeader = String.Format("hmac256 {0} {1} {2}", login.applicationId, timestamp, ByteToString(hashmessage));
+               var authHeader = String.Format("hmac256 {0} {1} {2}", login.applicationId, timestamp, ByteToString(hashmessage));
                request.Headers.Add("Authentication", authHeader);
             }
          }
@@ -173,22 +182,22 @@ namespace ZenDesk_import
 
       private static T GetObject<T>(WebRequest request)
       {
-         WebResponse response = request.GetResponse();
+         var response = request.GetResponse();
 
          var dataStream = response.GetResponseStream();
          var reader = new StreamReader(dataStream);
-         string json = reader.ReadToEnd();
+         var json = reader.ReadToEnd();
 
-         T result = (T)JsonConvert.DeserializeObject(json, typeof(T));
+         var result = (T)JsonConvert.DeserializeObject(json, typeof(T));
 
          return result;
       }
 
       private static string ByteToString(byte[] buff)
       {
-         string sbinary = "";
+         var sbinary = "";
 
-         for (int i = 0; i < buff.Length; i++)
+         for (var i = 0; i < buff.Length; i++)
          {
             sbinary += buff[i].ToString("X2"); // hex format
          }
