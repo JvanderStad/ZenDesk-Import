@@ -100,7 +100,6 @@ namespace ZenDesk_import
             Logger.Info("Creating Ticket {0}", ticket.ticketNumber);
 
             ticket.organizationId = GetOrganizationId(loginResult, xmlTicket["organization-id"].InnerText, options); // map to organization id
-            ticket.statusId = xmlTicket["status-id"].InnerText; //Map to the status id, is related table?
             ticket.createdByUserId = GetUserId(loginResult, xmlTicket["requester-id"].InnerText, options); // map to the user id
             ticket.assignedUserId = GetUserId(loginResult, xmlTicket["assignee-id"].InnerText, options); //Map to the user id
             ticket.assignedDepartmentId = GetDepartmentId(loginResult, xmlTicket["group-id"].InnerText, options); //Map to the department id

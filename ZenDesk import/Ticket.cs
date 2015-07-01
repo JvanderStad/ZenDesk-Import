@@ -35,8 +35,6 @@ namespace ZenDesk_import
       public string organizationId { get; set; }
       // Zendesk Comments
       public List<History> history { get; set; }
-      // Zendesk status-id
-      public string statusId { get; set; }
       // Zendesk requester-id
       public string createdByUserId { get; set; }
       // Zendesk N/A
