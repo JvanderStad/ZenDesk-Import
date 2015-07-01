@@ -57,7 +57,7 @@ namespace ZenDesk_import
       public List<TicketTag> tagsPerTicket { get; set; }
 
       // Zendesk (a custom field that is present in ticket-field-entries[3])
-      public string PriorityId { get; set; }
+      public string priorityId { get; set; }
    }
 
    public class History
@@ -119,6 +119,27 @@ namespace ZenDesk_import
       {
          this.tag = tag.Replace("_", " ");
       }
+   }
+
+   public class TicketCategory
+   {
+      public string id { get; set; }
+      public bool hidden { get; set; }
+      public string name { get; set; }
+   }
+
+
+   public class TicketPriority
+   {
+      public TicketPriority() { }
+
+      public TicketPriority(string name)
+      {
+         this.name = name.Replace("_", " ");
+      }
+      public string id { get; set; }
+      public bool hidden { get; set; }
+      public string name { get; set; }
    }
 
    public class DateTimeParse
