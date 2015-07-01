@@ -85,20 +85,60 @@ namespace ZenDesk_import
             return;
 
          Logger.Info("{0} tickets found", tickets.Count);
+
+         Logger.Info("Create Login request");
          var loginResult = CreateLoginRequest(options);
 
+         Dictionary<string, string> localTags = GetTicketTags(loginResult, options);
+         Dictionary<string, string> localCategories = GetCategories(loginResult, options);
 
          foreach (var xmlTicket in tickets.Cast<XmlElement>())
          {
+            
             var ticket = new Ticket(xmlTicket);
+            Logger.Info("Creating Ticket {0}", ticket.ticketNumber);
+
             ticket.organizationId = GetOrganizationId(loginResult, xmlTicket["organization-id"].InnerText, options); // map to organization id
-            ticket.statusId = xmlTicket["status-id"].InnerText; //Map to the right Guid
+            ticket.statusId = xmlTicket["status-id"].InnerText; //Map to the status id, is related table?
             ticket.createdByUserId = GetUserId(loginResult, xmlTicket["requester-id"].InnerText, options); // map to the user id
+            ticket.assignedUserId = GetUserId(loginResult, xmlTicket["assignee-id"].InnerText, options); //Map to the user id
+            ticket.assignedDepartmentId = xmlTicket["group-id"].InnerText; //Map to the department id
+
+            // Tags
+            ticket.tagsPerTicket = new List<TicketTag>();
+            string[] tags = xmlTicket["current-tags"].InnerText.Split(' ');
+            foreach (string tag in tags)
+            {
+               TicketTag ticketTag = new TicketTag(tag);
+               if (localTags.ContainsKey(tag))
+               {
+                  ticketTag.id = localTags[tag];
+               }
+               else
+               {
+                  ticketTag = CreateTag(loginResult, ticketTag, options);
+                  localTags.Add(ticketTag.tag, ticketTag.id);
+               }
+               ticket.tagsPerTicket.Add(ticketTag);
+            }
 
             // Category
             var ticketFields = xmlTicket.SelectNodes("ticket-field-entries/ticket-field-entry");
             var category = ticketFields.Cast<XmlElement>().FirstOrDefault();
-            ticket.categoryId = category != null ? category["value"].InnerText : "";
+            if(category != null && !String.IsNullOrWhiteSpace(category["value"].InnerText)) {
+               Category cat = new Category();
+               cat.name = category["value"].InnerText;
+               if (localCategories.ContainsKey(cat.name))
+               {
+                  ticket.categoryId = localTags[cat.name];
+               }
+               else
+               {
+                  cat = CreateCategory(loginResult, cat, options);
+                  localCategories.Add(cat.name, cat.id);
+                  ticket.categoryId = cat.id;
+               }
+            }
 
             // Comments
             ticket.history = new List<History>();
@@ -106,11 +146,57 @@ namespace ZenDesk_import
             foreach (var xmlComment in comments.Cast<XmlElement>())
             {
                var comment = new History(xmlComment);
+               comment.userId = GetUserId(loginResult, xmlComment["author-id"].InnerText, options);
                ticket.history.Add(comment);
             }
 
             _result.Add(ticket);
          }
+      }
+
+      private static Dictionary<string, string> GetCategories(LoginResult loginResult, CommandlineOptions options)
+      {
+         Dictionary<string, string> categories = new Dictionary<string, string>();
+         WebRequest request = CreateRequest("ticketTags", "GET", options, loginResult);
+
+         foreach (var cat in GetList<Category>(request))
+         {
+            if (!categories.ContainsKey(cat.name))
+               categories.Add(cat.name, cat.id);
+         }
+         return categories;
+      }
+
+      private static TicketTag CreateTag(LoginResult loginResult, TicketTag ticketTag, CommandlineOptions options)
+      {
+         var content = JsonConvert.SerializeObject(ticketTag);
+
+         var request = CreateRequest("ticketTag", "POST", options, loginResult);
+         
+         var dataArray = Encoding.UTF8.GetBytes(content.ToString());
+         request.ContentLength = dataArray.Length;
+
+         var requestStream = request.GetRequestStream();
+         requestStream.Write(dataArray, 0, dataArray.Length);
+         requestStream.Close();
+
+         return GetObject<TicketTag>(request);
+      }
+
+      private static Category CreateCategory(LoginResult loginResult, Category category, CommandlineOptions options)
+      {
+         var content = JsonConvert.SerializeObject(category);
+
+         var request = CreateRequest("ticketCategory", "POST", options, loginResult);
+
+         var dataArray = Encoding.UTF8.GetBytes(content.ToString());
+         request.ContentLength = dataArray.Length;
+
+         var requestStream = request.GetRequestStream();
+         requestStream.Write(dataArray, 0, dataArray.Length);
+         requestStream.Close();
+
+         return GetObject<Category>(request);
       }
 
       private static LoginResult CreateLoginRequest(CommandlineOptions options)
@@ -130,22 +216,39 @@ namespace ZenDesk_import
 
       private static string GetOrganizationId(LoginResult login, string oldId, CommandlineOptions options)
       {
-         var request = CreateRequest(String.Format("organizations?code={0}", oldId), "GET", options, login);
+         var request = CreateRequest(String.Format("organizations?searchCode={0}", oldId), "GET", options, login);
 
-         var organization = GetObject<Organization>(request);
+         var organization = GetList<Organization>(request).FirstOrDefault();
 
-         return organization.id;
+         if (organization != null)
+            return organization.id.ToString();
+         else
+            return String.Empty;
       }
 
       private static string GetUserId(LoginResult login, string oldId, CommandlineOptions options)
       {
-         var request = CreateRequest(String.Format("user?code={0}", oldId), "GET", options, login);
+         var request = CreateRequest(String.Format("users?code={0}", oldId), "GET", options, login);
 
-         var user = GetObject<User>(request);
+         var user = GetList<User>(request).FirstOrDefault();
 
-         return user.id.ToString();
+         if (user != null)
+            return user.id.ToString();
+         else
+            return String.Empty;
       }
 
+      private static Dictionary<string, string> GetTicketTags(LoginResult login, CommandlineOptions options){
+         Dictionary<string, string> tags = new Dictionary<string, string>();
+         WebRequest request = CreateRequest("ticketTags", "GET", options, login);
+
+         foreach (var tag in GetList<TicketTag>(request))
+         {
+            if(!tags.ContainsKey(tag.tag))
+               tags.Add(tag.tag, tag.id);
+         }
+         return tags;
+      }
 
 	  public static long GetEpochTime(DateTime dt)
 	  {
@@ -188,9 +291,23 @@ namespace ZenDesk_import
          var reader = new StreamReader(dataStream);
          var json = reader.ReadToEnd();
 
-         var result = (T)JsonConvert.DeserializeObject(json, typeof(T));
+         var result = JsonConvert.DeserializeObject<T>(json);
+
+         return result;  
+      }
+
+      private static List<T> GetList<T>(WebRequest request)
+      {
+         var response = request.GetResponse();
+
+         var dataStream = response.GetResponseStream();
+         var reader = new StreamReader(dataStream);
+         var json = reader.ReadToEnd();
+
+         var result = JsonConvert.DeserializeObject<List<T>>(json);
 
          return result;
+
       }
 
       private static string ByteToString(byte[] buff)
@@ -245,5 +362,11 @@ namespace ZenDesk_import
          public string email { get; set; }
       }
 
+      public class Category
+      {
+         public string id { get; set; }
+         public bool hidden { get; set; }
+         public string name { get; set; }
+      }
    }
 }
