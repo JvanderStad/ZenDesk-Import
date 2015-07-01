@@ -9,6 +9,8 @@ namespace ZenDesk_import
 		[Option("xml", HelpText = "Source Xml file")]
 		public string XmlFile { get; set; }
 
+      [Option("rootUrl", HelpText = "Root url of API")]
+      public string ApiRootUrl { get; set; }
 
 		[HelpOption]
 		public string GetUsage()
