@@ -105,7 +105,7 @@ namespace ZenDesk_import
 		private static void PostTickets()
 		{
 			var splitIndex = 0;
-			foreach (var split in Split(Result, 25))
+			foreach (var split in Split(Result, 10))
 			{
 				splitIndex += split.Count;
 
@@ -661,6 +661,7 @@ namespace ZenDesk_import
 			}
 			
 			var request = WebRequest.Create(_options.DefactoUrl + _options.ApiRoot + url);
+			request.Timeout = 1000 * 60 * 5;
 			request.Method = method.ToString();
 			var timestamp = GetEpochTime( DateTime.Now );
 
